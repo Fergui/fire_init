@@ -101,11 +101,14 @@ def merc_to_lonlat(*args):
     """
     if vparse(pyproj.__version__) < vparse('2.2'):
         transformer = partial(pyproj.transform, pyproj.Proj(proj_merc), pyproj.Proj(proj_latlon))
-        return transformer(*args)
+        if len(args) != 2:
+            return transform(transformer, *args)  
+        else:
+            return transformer(args[0], args[1])
     else:
         transformer = pyproj.Transformer.from_crs(proj_merc, proj_latlon).transform
         if len(args) != 2:
-            return transformer(*args)
+            return transform(transformer, *args)
         else:
             return transformer(*args)[::-1]
 
@@ -269,47 +272,12 @@ def alpha_shape(points, alpha, only_outer=True):
     coords = create_coords(points, rings)
     return coords
 
-def transform_polys(polys, transformer, min_outer_coords=3, max_outer_coords=1e10, min_inner_coords=3, max_inner_coords=1e10):
-    """
-    Transform polys
-    :param polys:
-    :param tgt_proj:
-    :param src_proj:
-    :param min_outer_coords: 
-    :param max_outer_coords: 
-    :param min_inner_coords: 
-    :param max_inner_coords:
-    :return: 
-    """
-    transf_polys = []
-    for poly in polys:
-        transf_poly = []
-        p = poly[0]
-        if len(p) > min_outer_coords: 
-            if len(p) > max_outer_coords:
-                thinning = int(np.ceil(len(p)/max_outer_coords))
-                p = p[::thinning]
-            mp = Polygon(p)
-            transf_mp = transformer(mp)
-            transf_poly.append(np.c_[transf_mp.exterior.coords.xy])
-            for p in poly[1:]:
-                if len(p) > min_inner_coords: 
-                    if len(p) > max_inner_coords:
-                        thinning = int(np.ceil(len(p)/max_outer_coords))
-                        p = p[::thinning]
-                    mp = Polygon(p)
-                    transf_mp = transformer(mp)
-                    transf_poly.append(np.c_[transf_mp.exterior.coords.xy])
-        if len(transf_poly):
-            transf_polys.append(transf_poly)
-    return transf_polys
-
 def mask_perim(perims, points):
     """
-    Mask perimeter
-    :param perims:
-    :param points:
-    :return: 
+    Mask inside of perimeters
+    :param perims: list of lists format with outer and inner coordinates
+    :param points: grid points to mask the perimeters on
+    :return: mask array with 1s inside the perimeter and 0s outside
     """
     # create False mask with dimension of the points
     mask = np.zeros(len(points),dtype=bool)
@@ -333,14 +301,56 @@ def mask_perim(perims, points):
 
 def poly_area(poly):
     """
-    Polygon area
-    :param poly:
-    :return: 
+    Polygon area in acres
+    :param poly: shapely polygon element in WGS84
+    :return: area in acres
     """
     return lonlat_to_merc(poly).area/4047.
+
+def fire_interp(insideperim1, insideperim2, perim1, perim2, fxlon, fxlat, **params):
+    time_step = params.get('time_step', 60.)
+    perim1_time = params.get('perim1_time', -79200.)
+    perim2_time = params.get('perim2_time', 7200.)
+    outside_time = params.get('outside_time', 360000.)
+    outsideperim1 = ~insideperim1
+    outsideperim2 = ~insideperim2
+    # define active and inactive regions and coordinates
+    active = np.logical_and(outsideperim1,insideperim2)
+    num_active = (active==1).sum()
+    fxlon_active = fxlon[active]
+    fxlat_active = fxlat[active]
+    # initialize fire arrival time
+    TIGN_G = insideperim1*perim1_time+outsideperim2*perim2_time
+    # concatenate all coordinates from all outer boundary polygons
+    perim1_lons = np.array([c[0] for p in perim1 for c in p[0]])
+    perim1_lats = np.array([c[1] for p in perim1 for c in p[0]])
+    perim2_lons = np.array([c[0] for p in perim2 for c in p[0]])
+    perim2_lats = np.array([c[1] for p in perim2 for c in p[0]])
+    # compute distance between each active point compared to the closest first perimeter point
+    pp = np.tile(perim1_lons,(num_active,1))
+    d1 = (pp-fxlon_active[:,np.newaxis])**2
+    pp = np.tile(perim1_lats,(num_active,1))
+    d1 = (d1 + (pp-fxlat_active[:,np.newaxis])**2).min(axis=1)
+    # compute distance between each active point compared to the closest second perimeter point
+    pp = np.tile(perim2_lons,(num_active,1))
+    d2 = (pp-fxlon_active[:,np.newaxis])**2
+    pp = np.tile(perim2_lats,(num_active,1))
+    d2 = (d2 + (pp-fxlat_active[:,np.newaxis])**2).min(axis=1)
+    # compute fire arrival time at the active points as a linear interpolation between perimeter times weighted by distances
+    eps = 1e-8
+    TIGN_G_active = d2/(d1+d2+eps)*perim1_time+d1/(d1+d2+eps)*perim2_time
+    # substitute the points in the active region, using the interpolated data
+    TIGN_G_final = TIGN_G.copy()
+    TIGN_G_final[active] = TIGN_G_active                    # use interpolated data in the active region
+    TIGN_G_final[TIGN_G_final<perim1_time] = perim1_time    # set points less then the first perimeter time to the first perimeter time
+    TIGN_G_final[outsideperim2] = outside_time              # set large value outside of the second perimeter so this region won't get ignited
+    TIGN_G_final[TIGN_G_final>outside_time] = outside_time  # if interpolation gave crazy high numbers set them to outside time.
+    TIGN_G_final[TIGN_G_final<time_step] = time_step        # if interpolation gave crazy small numbers set them to time step.
+    return TIGN_G_final
 
 ''' # set parameters to reduce complexity of multipolygons (from transform_poly)
     min_inner_coords = 10     # minimum number of coordinates for an inner polygon
     max_inner_coords = 1000   # maximum number of coordinates for an inner polygon
     min_outer_coords = 50     # minimum number of coordinates for an outer polygon
     max_outer_coords = 10000  # maximum number of coordinates for an outer polygon'''
+    

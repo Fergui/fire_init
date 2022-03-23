@@ -1,10 +1,20 @@
 import logging
+import pickle
 import os.path as osp
 import netCDF4 as nc
 import numpy as np
 from lxml import etree
 
-def read_wrfinfo(filePath,boundary=False):
+def save_pkl(data, path):
+    with open(path,'wb') as f:
+        pickle.dump(data,f,protocol=3)
+
+def load_pkl(path):
+    with open(path,'rb') as f:
+        r = pickle.load(f)
+    return r
+
+def read_wrfinfo(filePath):
     logging.info('reading wrfout fire grid')
     # open netCDF file
     d = nc.Dataset(filePath)
@@ -23,6 +33,12 @@ def read_wrfinfo(filePath,boundary=False):
     # close netCDF file
     d.close()
     return ifm,ifn,ffm,ffn,fxlon,fxlat
+
+def read_bbox(path):
+    logging.info('reading wrfout bbox')
+    _,_,_,_,fxlon,fxlat = read_wrfinfo(path)
+    bbox = (fxlon.min(),fxlon.max(),fxlat.min(),fxlat.max())
+    return bbox
 
 def read_kml(path):
     # parse XLM file
@@ -51,9 +67,9 @@ def read_kml(path):
             polys.append(poly)
     return polys
 
-def integrate_init(wrfinput_path, TIGN_G, FUEL_MASK, outside_time=360000., include_boundary=False):
+def integrate_init(wrfinput_path, TIGN_G, FUEL_MASK, outside_time=360000.):
     logging.info('integrate initialization')
-    ifm,ifn,ffm,ffn,_,_ = read_wrfinfo(wrfinput_path,boundary=include_boundary)
+    ifm,ifn,ffm,ffn,_,_ = read_wrfinfo(wrfinput_path)
     # open wrfinput file in append mode
     d = nc.Dataset(wrfinput_path,'a')
     # read existing fire arrival time and fuel

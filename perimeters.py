@@ -1,12 +1,11 @@
 import logging
-import pickle
 import simplekml
 import numpy as np
 import pandas as pd
 from collections.abc import Iterable
 from geometry import coords_to_polys, poly_area
-from plot_tools import plot_perim
-from utils import read_kml
+from plot_tools import plot_perim,_colors
+from utils import load_pkl,read_kml
 
 class PerimeterError(Exception):
     pass
@@ -37,8 +36,11 @@ class Perimeter(object):
             raise PerimeterError('Perimeter - info provided {} not recognized'.format(info))
         self.area = poly_area(self.poly)
         
-    def plot(self):
-        plot_perim(self, show=True)
+    def __len__(self):
+        return len(self.coords)
+    
+    def plot(self, show=False, **args):
+        return plot_perim(self, show=show, **args)
 
     def _polygonize(self):
         return coords_to_polys(self.coords)
@@ -64,8 +66,7 @@ class Perimeter(object):
         self.poly = self._polygonize()
 
     def _from_pkl(self, path):
-        with open(path,'rb') as f:
-            data = pickle.load(f)
+        data = load_pkl(path)
         if isinstance(data,tuple) and len(data) == 2:
             self.time, self.coords = data
         else:
@@ -116,10 +117,15 @@ class Perimeters(object):
     def __len__(self):
         return self.num_perims
     
-    def plot(self):
-        for p in self._perims[:-1]:
-            plot_perim(p)
-        plot_perim(self._perims[-1], show=True)
+    def plot(self, show=False, **args):
+        i = -1
+        for i,p in enumerate(self._perims[:-1]):
+            color = _colors(i % 10) 
+            args['color'] = color
+            plot_perim(p, show=False, **args)
+        color = _colors((i+1) % 10)
+        args['color'] = color
+        plot_perim(self._perims[-1], show=show, **args)
     
     def to_csv(self, path):
         logging.info('Perimeters.to_csv - creating CSV file {}'.format(path))
