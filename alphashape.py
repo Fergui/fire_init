@@ -7,7 +7,10 @@ from geometry import alpha_shape, coords_to_polys, simplify_coords, merc_to_lonl
 from utils import save_pkl
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-hotspots_path = 'arcgis_hotspots.pkl'
+if len(sys.argv) > 1:
+    hotspots_path = sys.argv[1]
+else:
+    hotspots_path = 'arcgis_hotspots.pkl'
 now = datetime.utcnow().replace(tzinfo=timezone.utc)
 alpha = 375
 r = pd.read_pickle(hotspots_path)

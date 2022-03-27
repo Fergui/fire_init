@@ -118,7 +118,7 @@ def featureset_to_coords(feature_set):
     Feature sets need to have a SHAPE or shape field (geocoded) with a MultiPolygon object.
     Returning perimeter is in format:
     [[outer, inners], [outer, inners], ...]
-    :param feature_set: feature set with a SHAPE or shape MultiPolygon.
+    :param feature_set: feature set with a SHAPE or shape MultiPolygon
     :return: return list of lists with outer and inner coordinates 
     """
     coord = []
@@ -200,9 +200,9 @@ def create_coords(points, rings):
     
 def edges_to_rings(edges):
     """
-    Rings creation from pairs of edges
-    :param edges: set of (i,j) pairs representing edges of the alpha-shape. (i,j) are
-    the indices in the points array
+    Rings creation from pairs of edges.
+    :param edges: set of (i,j) pairs representing edges of the alpha-shape. 
+    (i,j) are the indices in the points array
     :return: closed rings created from the edges
     """
     edges_list = list(edges)
@@ -274,7 +274,7 @@ def alpha_shape(points, alpha, only_outer=True):
 
 def mask_perim(perims, points):
     """
-    Mask inside of perimeters
+    Mask inside of perimeters.
     :param perims: list of lists format with outer and inner coordinates
     :param points: grid points to mask the perimeters on
     :return: mask array with 1s inside the perimeter and 0s outside
@@ -301,13 +301,24 @@ def mask_perim(perims, points):
 
 def poly_area(poly):
     """
-    Polygon area in acres
+    Polygon area in acres.
     :param poly: shapely polygon element in WGS84
     :return: area in acres
     """
     return lonlat_to_merc(poly).area/4047.
 
 def fire_interp(insideperim1, insideperim2, perim1, perim2, fxlon, fxlat, **params):
+    """
+    Fire arrival time interpolation.
+    :param insideperim1: mask of first perimeter
+    :param insideperim2: mask of second perimeter
+    :param perim1: first perimeter coordinates
+    :param perim2: second perimeter coordinates
+    :param fxlon: longitude coordinates grid
+    :param fxlat: latitude coordinates grid
+    :param params: dictonary of parameters to interpolate fire arrival time
+    :return: fire arrival time matrix
+    """
     time_step = params.get('time_step', 60.)
     perim1_time = params.get('perim1_time', -79200.)
     perim2_time = params.get('perim2_time', 7200.)
@@ -347,10 +358,4 @@ def fire_interp(insideperim1, insideperim2, perim1, perim2, fxlon, fxlat, **para
     TIGN_G_final[TIGN_G_final>outside_time] = outside_time  # if interpolation gave crazy high numbers set them to outside time.
     TIGN_G_final[TIGN_G_final<time_step] = time_step        # if interpolation gave crazy small numbers set them to time step.
     return TIGN_G_final
-
-''' # set parameters to reduce complexity of multipolygons (from transform_poly)
-    min_inner_coords = 10     # minimum number of coordinates for an inner polygon
-    max_inner_coords = 1000   # maximum number of coordinates for an inner polygon
-    min_outer_coords = 50     # minimum number of coordinates for an outer polygon
-    max_outer_coords = 10000  # maximum number of coordinates for an outer polygon'''
     

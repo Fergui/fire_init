@@ -7,6 +7,15 @@ from geometry import mask_perim, fire_interp, lonlat_to_merc, merc_to_lonlat, po
 from utils import load_pkl, save_pkl, integrate_init, add_smoke
 
 def perims_interp(perim1, perim2, fxlon, fxlat, **params):
+    """
+    Perimeter interpolation and fuel masking.
+    :param perim1: first perimeter coordinates (list of lists with outer and inner coordinates)
+    :param perim2: second perimeter coordinates (list of lists with outer and inner coordinates)
+    :param fxlon: longitude coordinates grid
+    :param fxlat: latitude coordinates grid
+    :param params: dictonary of parameters to interpolate fire arrival time and fuel mask
+    :return: fire arrival time, fuel mask, and perimeter masks
+    """
     # resolving parameters
     simplify_tol = params.get('simplify_tol', 1e-4)
     past_perims = params.get('past_perims', None)
@@ -27,18 +36,22 @@ def perims_interp(perim1, perim2, fxlon, fxlat, **params):
     elif past_perims is not None:
         # find points inside and outside past perimeters (defining masks)
         logging.info('finding mask for past perimeters')
-        past_perims = polys_to_coords(coords_to_polys(past_perims).simplify(simplify_tol))
+        past_perims = polys_to_coords(coords_to_polys(past_perims.coords).simplify(simplify_tol))
         insidepastperims = mask_perim(past_perims,points)
         save_pkl(insidepastperims,scars_mask_path)
         processed_past_perims = True
     # process previous perimeters and masks
+    processed_prev_perims = False
     if prev_perims is not None:
         prev_PERIMS = {}
         prev_MASKS = {}
+        prev_BUFF_MASKS = {}
         try:
             data = load_pkl(prev_perims)
             prev_PERIMS = data.get('PERIMS',{})
             prev_MASKS = data.get('PERIM_MASKS',{})
+            prev_BUFF_MASKS = data.get('BUFF_MASKS',{})
+            processed_prev_perims = True
         except Exception as e:
             logging.warning('something wrong when getting previous perimeters with exception {}'.format(e))
     # find points inside and outside perimeters (defining masks)
@@ -60,6 +73,7 @@ def perims_interp(perim1, perim2, fxlon, fxlat, **params):
     logging.info('calculate tign_g')
     TIGN_G = fire_interp(insideperim1, insideperim2, perim1, perim2, fxlon, fxlat, **params)
     # calculate fuel mask
+    BUFF_MASKS = {}
     logging.info('calculate fuel mask')
     if fuel_method == 0:
         FUEL_MASK = insideperim1.copy()
@@ -74,7 +88,9 @@ def perims_interp(perim1, perim2, fxlon, fxlat, **params):
         perim1buff = polys_to_coords(merc_to_lonlat(lonlat_to_merc(coords_to_polys(perim1)).buffer(ir_buffer_dist)).simplify(simplify_tol))
         insideperim1buff = mask_perim(perim1buff,points)
         insideperim1buff = np.reshape(insideperim1buff,fxlon.shape)
-        if prev_perims is not None:
+        if processed_prev_perims:
+            insideprevperim1buff = prev_BUFF_MASKS['mask1']
+            insideperim1buff = np.logical_or(insideperim1buff,insideprevperim1buff)
             logging.info('finding mask for previous perimeter 2 buffer')
             prev_perim2 = prev_PERIMS['perim2'].coords
             prev_perim2_buff = polys_to_coords(merc_to_lonlat(lonlat_to_merc(coords_to_polys(prev_perim2)).buffer(sat_buffer_dist)).simplify(simplify_tol))
@@ -82,13 +98,14 @@ def perims_interp(perim1, perim2, fxlon, fxlat, **params):
             insideprevperim2buff = np.reshape(insideprevperim2buff,fxlon.shape)
         else:
             insideprevperim2buff = np.zeros(fxlon.shape)
+        BUFF_MASKS.update({'mask1': insideperim1buff, 'mask2': insideprevperim2buff})
         FUEL_MASK = np.logical_or(insideperim1buff.astype(bool),insideprevperim2buff.astype(bool))
         FUEL_MASK = FUEL_MASK.astype(bool)
         if processed_past_perims:
             FUEL_MASK[insidepastperims.reshape(FUEL_MASK.shape)] = True
     else:
         logging.error()
-    return TIGN_G,FUEL_MASK,PERIM_MASKS
+    return TIGN_G,FUEL_MASK,PERIM_MASKS,BUFF_MASKS
 
 if __name__ == '__main__':
     from perimeters import Perimeter
@@ -118,7 +135,9 @@ if __name__ == '__main__':
         'fuel_method': 1, # fuel removal method: 0 - grid boundary margin, 1 - buffer perimeter margin
         'boundary_margin': 5,  # margin in grid points defining the region outside of the first perimeter where the fuel will be removed (only used for fuel_method 0)
         'ir_buffer_dist': 200., # distance in meters to create the buffer for IR perimeters to define masking of fuel (only used for fuel_method 1)
+        # maybe change it to min_ros*(perim2.time-perim1.time).total_seconds()? With 2h=7200s and ros_min=0.01m/s => ir_buffer_dist=72m
         'sat_buffer_dist': 500., # distance in meters to create the buffer for IR perimeters to define masking of fuel (only used for fuel_method 1)
+        # maybe change it to maximal fire detection resolution? So, VIIRS are 350m but adding angle can get to 500m easily
         'past_perims_path': 'arcgis_past_perims.pkl',  # path to past perims to create scars mask
         'scars_mask_path': 'scars_mask.pkl',  # path to past scars mask
         'integrate_now': False  # wrfinput already provided and ready to integrate 
@@ -136,7 +155,7 @@ if __name__ == '__main__':
     perim2 = Perimeter(perim2_path)
     if 'scars_mask_path' in params and not osp.exists(params['scars_mask_path']) and 'past_perims_path' in params:
         past_perim = Perimeter(params['past_perims_path'])
-        params.update({'past_perims': past_perim.coords}) 
+        params.update({'past_perims': past_perim}) 
     # if the time is included in the perimeters
     c1 = perim1.time is not None
     c2 = perim2.time is not None
@@ -145,12 +164,16 @@ if __name__ == '__main__':
         params['perim1_time'] = -min(max(0,(perim2.time-perim1.time).total_seconds()),36000.)
     PERIMS = {'perim1': perim1, 'perim2': perim2}
     # calculate tign_g and fuel_mask
-    TIGN_G,FUEL_MASK,PERIM_MASKS = perims_interp(perim1.coords, perim2.coords, fxlon, fxlat, **params)
+    TIGN_G,FUEL_MASK,PERIM_MASKS,BUFF_MASKS = perims_interp(perim1.coords, perim2.coords, fxlon, fxlat, **params)
     save_pkl({'PERIMS': PERIMS, 'PERIM_MASKS': PERIM_MASKS, 
               'TIGN_G': TIGN_G, 'FUEL_MASK': FUEL_MASK, 
-              'params': params, 'fxlon': fxlon, 'fxlat': fxlat}, result_path+'.pkl')
+              'BUFF_MASKS': BUFF_MASKS, 'params': params, 
+              'fxlon': fxlon, 'fxlat': fxlat}, result_path+'.pkl')
     # integrate perimeters and add smoke
     if params['integrate_now']:
         integrate_init(wrfinput_path, TIGN_G, FUEL_MASK, **params)
-        add_smoke()
+        add_smoke(
+            ['wrfout_d01','wrfout_d02','wrfout_d03'],
+            ['wrfinput_d01','wrfinput_d02','wrfinput_d03']
+        )
     logging.info('DONE')
