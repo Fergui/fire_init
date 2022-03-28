@@ -127,3 +127,9 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Data files
+*.pkl
+
+# WRF init file
+wrf_init
