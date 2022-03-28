@@ -24,18 +24,21 @@ if len(points) < 4:
 t = r['esritimeutc'].sort_values(ascending=False).iloc[0].to_pydatetime(warn=False).replace(tzinfo=timezone.utc) 
 # Computing the alpha shape
 perims = alpha_shape(points, alpha=alpha, only_outer=True)
-# set parameters to reduce complexity of multipolygons
-params = {
-    'min_inner_coords': 20,     # minimum number of coordinates for an inner polygon
-    'max_inner_coords': 1000,   # maximum number of coordinates for an inner polygon
-    'min_outer_coords': 4,      # minimum number of coordinates for an outer polygon
-    'max_outer_coords': 10000   # maximum number of coordinates for an outer polygon
-}
-perims = simplify_coords(perims,**params)
-polys = coords_to_polys(perims)
-transf_polys = merc_to_lonlat(polys)
-transf_perims = polys_to_coords(transf_polys)
-# Save perimeters
-if len(transf_perims):
-    save_pkl((t,transf_perims),'perim2.pkl')
+if len(perims):
+    # set parameters to reduce complexity of multipolygons
+    params = {
+        'min_inner_coords': 20,     # minimum number of coordinates for an inner polygon
+        'max_inner_coords': 1000,   # maximum number of coordinates for an inner polygon
+        'min_outer_coords': 4,      # minimum number of coordinates for an outer polygon
+        'max_outer_coords': 10000   # maximum number of coordinates for an outer polygon
+    }
+    perims = simplify_coords(perims,**params)
+    polys = coords_to_polys(perims)
+    transf_polys = merc_to_lonlat(polys)
+    transf_perims = polys_to_coords(transf_polys)
+    # Save perimeters
+    if len(transf_perims):
+        save_pkl((t,transf_perims),'perim2.pkl')
+else:
+    transf_perims = perims
 save_pkl((t,transf_perims),'hotspots_perims_{:02d}{:02d}_{:02d}z.pkl'.format(t.month,t.day,t.hour))

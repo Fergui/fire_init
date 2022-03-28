@@ -1,7 +1,7 @@
 import sys
 import logging
 import os.path as osp
-from utils import load_pkl,integrate_perims,add_smoke
+from utils import load_pkl,integrate_init,add_smoke
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 if len(sys.argv) != 2:
@@ -11,7 +11,7 @@ elif not osp.exists(sys.argv[1]):
 pkl_path = sys.argv[1]
 data = load_pkl(pkl_path)
 # integrate perimeter interpolation and fuel mask
-integrate_perims('wrfinput_d03', data['TIGN_G'], data['FUEL_MASK'], **data['params'])
+integrate_init('wrfinput_d03', data['TIGN_G'], data['FUEL_MASK'], data['params']['outside_time'])
 # add smoke from previous forecast
 add_smoke(
     ['wrfout_d01','wrfout_d02','wrfout_d03'],

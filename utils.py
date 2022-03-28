@@ -3,6 +3,7 @@ import pickle
 import netCDF4 as nc
 import numpy as np
 from lxml import etree
+import os.path as osp
 
 def save_pkl(data, path):
     """
@@ -123,6 +124,9 @@ def add_smoke(wrfout_paths, wrfinput_paths):
     :param wrfinput_paths: list of paths to WRF netCDF input files
     """
     logging.info('add smoke')
+    if any([~osp.exists(wp) for wp in wrfout_paths]):
+        logging.warning('missing some wrfout file, so skipping')
+        return
     assert len(wrfout_paths) == len(wrfinput_paths), 'missing some wrfout file, so skipping'
     # smoke from previous forecast
     for i in range(len(wrfout_paths)):
