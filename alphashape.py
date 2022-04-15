@@ -1,11 +1,15 @@
-import sys
-import logging
+try:
+    from .geometry import alpha_shape, coords_to_polys, simplify_coords, merc_to_lonlat, polys_to_coords
+    from .tools import save_pkl
+except:
+    from geometry import alpha_shape, coords_to_polys, simplify_coords, merc_to_lonlat, polys_to_coords
+    from tools import save_pkl
 from datetime import datetime,timezone
-import numpy as np
 import pandas as pd
-from geometry import alpha_shape, coords_to_polys, simplify_coords, merc_to_lonlat, polys_to_coords
-from utils import save_pkl
-
+import numpy as np
+import logging
+import sys
+    
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 if len(sys.argv) > 1:
     hotspots_path = sys.argv[1]

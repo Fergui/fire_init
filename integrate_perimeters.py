@@ -1,7 +1,10 @@
-import sys
-import logging
+try:
+    from .tools import load_pkl,integrate_init,add_smoke
+except:
+    from tools import load_pkl,integrate_init,add_smoke
 import os.path as osp
-from utils import load_pkl,integrate_init,add_smoke
+import logging
+import sys
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 if len(sys.argv) != 2:

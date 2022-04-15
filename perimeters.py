@@ -1,11 +1,16 @@
-import logging
-import simplekml
-import numpy as np
-import pandas as pd
+try:
+    from .geometry import coords_to_polys, poly_area
+    from .plot_tools import plot_perim,_colors
+    from .tools import load_pkl,read_kml
+except:
+    from geometry import coords_to_polys, poly_area
+    from plot_tools import plot_perim,_colors
+    from tools import load_pkl,read_kml 
 from collections.abc import Iterable
-from geometry import coords_to_polys, poly_area
-from plot_tools import plot_perim,_colors
-from utils import load_pkl,read_kml
+import pandas as pd
+import numpy as np
+import simplekml
+import logging
 
 class PerimeterError(Exception):
     pass

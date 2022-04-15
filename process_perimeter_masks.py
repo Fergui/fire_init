@@ -1,10 +1,13 @@
-import logging
-import numpy as np
-import os.path as osp
+try:
+    from .geometry import mask_perim, fire_interp, lonlat_to_merc, merc_to_lonlat, polys_to_coords, coords_to_polys
+    from .tools import read_wrfinfo, load_pkl, save_pkl, integrate_init, add_smoke
+except:
+    from geometry import mask_perim, fire_interp, lonlat_to_merc, merc_to_lonlat, polys_to_coords, coords_to_polys
+    from tools import read_wrfinfo, load_pkl, save_pkl, integrate_init, add_smoke
 from datetime import datetime, timedelta, timezone
-from utils import read_wrfinfo
-from geometry import mask_perim, fire_interp, lonlat_to_merc, merc_to_lonlat, polys_to_coords, coords_to_polys
-from utils import load_pkl, save_pkl, integrate_init, add_smoke
+import os.path as osp
+import numpy as np
+import logging
 
 def perims_interp(perim1, perim2, fxlon, fxlat, **params):
     """

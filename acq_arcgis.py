@@ -1,10 +1,14 @@
+try:
+    from .tools import read_wrfinfo
+    from .geometry import featureset_to_coords, simplify_coords, lonlat_to_merc
+except:
+    from tools import read_wrfinfo
+    from geometry import featureset_to_coords, simplify_coords, lonlat_to_merc  
+from datetime import datetime,timedelta,timezone
 import arcgis
 import pickle
 import logging
 import time
-from datetime import datetime,timedelta,timezone
-from process_perimeter_masks import read_wrfinfo
-from geometry import featureset_to_coords, simplify_coords, lonlat_to_merc
 
 def retry_query(layer, where=None, geometry_filter=None, max_retries=5):
     for retry in range(max_retries):

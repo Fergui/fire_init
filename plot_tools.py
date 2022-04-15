@@ -1,7 +1,10 @@
+try:
+    from .tools import read_bbox, load_pkl
+except:
+    from tools import read_bbox, load_pkl
 import matplotlib.pyplot as plt
 from matplotlib.cm import get_cmap
 import numpy as np
-from utils import read_bbox, load_pkl
 
 _colors = get_cmap('tab10')
 

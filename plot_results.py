@@ -1,12 +1,16 @@
-import sys
+try:
+    from .plot_tools import plot_perims,plot_coords,plot_tign,plot_fmask
+    from .tools import load_pkl
+except:
+    from plot_tools import plot_perims,plot_coords,plot_tign,plot_fmask
+    from tools import load_pkl
 import os.path as osp
-from utils import load_pkl
-from plot_tools import plot_perims,plot_coords,plot_tign,plot_fmask
+import sys
 
 if len(sys.argv) != 2:
-    print('ERROR: {} pkl_path'.format(sys.argv[0]))
+    print('usage: python {} pkl_path'.format(sys.argv[0]))
 elif not osp.exists(sys.argv[1]):
-    print('ERROR: pkl_path {} not existent'.format(sys.argv[1]))
+    print('error: pkl_path {} not existent'.format(sys.argv[1]))
 pkl_path = sys.argv[1]
 # plotting fire arrival time result
 plot_tign(pkl_path)
