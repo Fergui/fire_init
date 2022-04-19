@@ -128,18 +128,24 @@ def add_smoke(wrfout_paths, wrfinput_paths):
     if any([not osp.exists(wp) for wp in wrfout_paths]):
         logging.warning('missing some wrfout file, so skipping')
         return
-    bbox_out = read_bbox(wrfout_paths[-1])
-    bbox_in = read_bbox(wrfout_paths[-1])
+    with nc.Dataset(wrfout_paths[-1]) as d:
+        xlon = d.variables['XLONG']
+        xlat = d.variables['XLAT']
+        bbox_out = (xlon.min(), xlon.max(), xlat.min(), xlat.max())
+    with nc.Dataset(wrfinput_paths[-1]) as d:
+        xlon = d.variables['XLONG']
+        xlat = d.variables['XLAT']
+        bbox_in = (xlon.min(), xlon.max(), xlat.min(), xlat.max())
     if bbox_out != bbox_in:
-        logging.warning('bounding box for wrfout_d03 is {} different than wrfinput_d03 is {}, add_smoke skipped'.format(bbox_out,bbox_in))
+        logging.warning('bounding box for wrfout_d03 \n {} \n which is different than wrfinput_d03 \n {} \n add_smoke skipped'.format(bbox_out,bbox_in))
         return
     # smoke from previous forecast
     for i in range(len(wrfout_paths)):
         logging.info('smoke in domain {}'.format(i+1))
         with nc.Dataset(wrfout_paths[i]) as d:
             tr17_1 = d['tr17_1'][...]
-        if d['tr17_1'][...].shape != tr17_1.shape:
-            logging.warning('size of domains do not correspond, add_smoke skipped')
-            return
         with nc.Dataset(wrfinput_paths[i],'a') as d:
+            if d['tr17_1'][...].data.shape != tr17_1.data.shape:
+                logging.warning('size of domains do not correspond, add_smoke skipped')
+                return
             d['tr17_1'][:] = tr17_1
