@@ -133,5 +133,8 @@ def add_smoke(wrfout_paths, wrfinput_paths):
         logging.info('smoke in domain {}'.format(i+1))
         with nc.Dataset(wrfout_paths[i]) as d:
             tr17_1 = d['tr17_1'][...]
+        if d['tr17_1'][:].shape != tr17_1.shape:
+            logging.warning('size of domains do not correspond, add_smoke skipped')
+            return
         with nc.Dataset(wrfinput_paths[i],'a') as d:
             d['tr17_1'][:] = tr17_1
