@@ -124,16 +124,21 @@ def add_smoke(wrfout_paths, wrfinput_paths):
     :param wrfinput_paths: list of paths to WRF netCDF input files
     """
     logging.info('add smoke')
+    assert len(wrfout_paths) == len(wrfinput_paths), 'missing some wrfout file, so skipping'
     if any([not osp.exists(wp) for wp in wrfout_paths]):
         logging.warning('missing some wrfout file, so skipping')
         return
-    assert len(wrfout_paths) == len(wrfinput_paths), 'missing some wrfout file, so skipping'
+    bbox_out = read_bbox(wrfout_paths[-1])
+    bbox_in = read_bbox(wrfout_paths[-1])
+    if bbox_out != bbox_in:
+        logging.warning('bounding box for wrfout_d03 is {} different than wrfinput_d03 is {}, add_smoke skipped'.format(bbox_out,bbox_in))
+        return
     # smoke from previous forecast
     for i in range(len(wrfout_paths)):
         logging.info('smoke in domain {}'.format(i+1))
         with nc.Dataset(wrfout_paths[i]) as d:
             tr17_1 = d['tr17_1'][...]
-        if d['tr17_1'][:].shape != tr17_1.shape:
+        if d['tr17_1'][...].shape != tr17_1.shape:
             logging.warning('size of domains do not correspond, add_smoke skipped')
             return
         with nc.Dataset(wrfinput_paths[i],'a') as d:
