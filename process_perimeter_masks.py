@@ -9,6 +9,8 @@ import os.path as osp
 import numpy as np
 import logging
 
+from pyparsing import And
+
 def perims_interp(perim1, perim2, fxlon, fxlat, **params):
     """
     Perimeter interpolation and fuel masking.
@@ -28,23 +30,38 @@ def perims_interp(perim1, perim2, fxlon, fxlat, **params):
     ir_buffer_dist = params.get('ir_buffer_dist', 100.)
     sat_buffer_dist = params.get('sat_buffer_dist', 400.)
     scars_mask_path = params.get('scars_mask_path', 'scars_mask.pkl')
+    bbox = params.get('bbox', [])
     # defining points in the grid
     points = np.c_[fxlon.ravel(),fxlat.ravel()]
     # process past perimeters
     processed_past_perims = False
+    reprocess_past = True
+    same_bbox = False
     if osp.exists(scars_mask_path): 
-        logging.info(f'found scars mask in {scars_mask_path}')
-        insidepastperims = load_pkl(scars_mask_path)
-        processed_past_perims = True
-    elif past_perims is not None:
+        logging.info(f'found mask for past perimeters at {scars_mask_path}')
+        past_data = load_pkl(scars_mask_path)
+        if isinstance(past_data,dict) and 'mask' in past_data.keys():
+            insidepastperims = past_data['mask']
+        else:
+            insidepastperims = past_data
+        if isinstance(past_data,dict) and 'fxlon' in past_data.keys() and 'fxlat' in past_data.keys():
+            past_bbox = [past_data['fxlon'].min(),past_data['fxlon'].max(),past_data['fxlat'].min(),past_data['fxlat'].max()]
+            if past_bbox != [] and bbox != [] and len(past_bbox) == len(bbox) and past_bbox == bbox:
+                same_bbox = True
+            if past_data['fxlon'].shape == fxlon.shape and same_bbox:
+                reprocess_past = False
+                processed_past_perims = True
+    if past_perims is not None and reprocess_past:
         # find points inside and outside past perimeters (defining masks)
         logging.info('finding mask for past perimeters')
         past_perims = polys_to_coords(coords_to_polys(past_perims.coords).simplify(simplify_tol))
         insidepastperims = mask_perim(past_perims,points)
-        save_pkl(insidepastperims,scars_mask_path)
+        save_pkl({'fxlon': fxlon, 'fxlat': fxlat, 'mask': insidepastperims},scars_mask_path)
         processed_past_perims = True
     # process previous perimeters and masks
     processed_prev_perims = False
+    reprocess_prev = True
+    same_bbox = False
     if prev_perims is not None:
         prev_PERIMS = {}
         prev_MASKS = {}
@@ -54,7 +71,12 @@ def perims_interp(perim1, perim2, fxlon, fxlat, **params):
             prev_PERIMS = data.get('PERIMS',{})
             prev_MASKS = data.get('PERIM_MASKS',{})
             prev_BUFF_MASKS = data.get('BUFF_MASKS',{})
+            prev_bbox = data['params'].get('bbox',[])
             processed_prev_perims = True
+            if prev_bbox != [] and bbox != [] and len(prev_bbox) == len(bbox) and prev_bbox == bbox:
+                same_bbox = True
+            if prev_MASKS['mask1'].shape == fxlon.shape and same_bbox:
+                reprocess_prev = False
         except Exception as e:
             logging.warning('something wrong when getting previous perimeters with exception {}'.format(e))
     # find points inside and outside perimeters (defining masks)
@@ -62,9 +84,14 @@ def perims_interp(perim1, perim2, fxlon, fxlat, **params):
     perim1 = polys_to_coords(coords_to_polys(perim1).simplify(simplify_tol))
     insideperim1 = mask_perim(perim1,points)
     insideperim1 = np.reshape(insideperim1,fxlon.shape)
-    if prev_perims is not None:
-        logging.info('found mask for previous perimeter 1')
-        insideprevperim1 = prev_MASKS['mask1']
+    if processed_prev_perims:
+        if reprocess_prev:
+            logging.info('finding mask for previous perimeter 1')
+            insideprevperim1 = mask_perim(prev_PERIMS['perim1'].coords,points)
+            insideprevperim1 = np.reshape(insideprevperim1,fxlon.shape)
+        else:
+            logging.info('found mask for previous perimeter 1')
+            insideprevperim1 = prev_MASKS['mask1']
         insideperim1 = np.logical_or(insideperim1,insideprevperim1)
     logging.info('finding mask for perimeter 2')
     perim2 = polys_to_coords(coords_to_polys(perim2).simplify(simplify_tol))
@@ -92,7 +119,15 @@ def perims_interp(perim1, perim2, fxlon, fxlat, **params):
         insideperim1buff = mask_perim(perim1buff,points)
         insideperim1buff = np.reshape(insideperim1buff,fxlon.shape)
         if processed_prev_perims:
-            insideprevperim1buff = prev_BUFF_MASKS['mask1']
+            if reprocess_prev:
+                logging.info('finding mask for previous perimeter 1 buffer')
+                prev_perim1 = prev_PERIMS['perim1'].coords
+                prev_perim1_buff = polys_to_coords(merc_to_lonlat(lonlat_to_merc(coords_to_polys(prev_perim1)).buffer(ir_buffer_dist)).simplify(simplify_tol))
+                insideprevperim1buff = mask_perim(prev_perim1_buff,points)
+                insideprevperim1buff = np.reshape(insideprevperim1buff,fxlon.shape)
+            else:
+                logging.info('found mask for previous perimeter 1 buffer')
+                insideprevperim1buff = prev_BUFF_MASKS['mask1']
             insideperim1buff = np.logical_or(insideperim1buff,insideprevperim1buff)
             logging.info('finding mask for previous perimeter 2 buffer')
             prev_perim2 = prev_PERIMS['perim2'].coords
@@ -150,13 +185,13 @@ if __name__ == '__main__':
         params.update({'prev_perims': sys.argv[4]}) # previous results to use perimeters and masks
     # read fire grid and bounding box from it
     ifm,ifn,ffm,ffn,fxlon,fxlat = read_wrfinfo(wrf_path)
-    params.update({'ifm': ifm, 'ifn': ifn, 'ffm': ffm, 'ffn': ffn})
     bbox = [fxlon.min(),fxlon.max(),fxlat.min(),fxlat.max()]
+    params.update({'ifm': ifm, 'ifn': ifn, 'ffm': ffm, 'ffn': ffn, 'bbox': bbox})
     # getting IR perimeters
     logging.info('getting IR fire perimeters')
     perim1 = Perimeter(perim1_path)
     perim2 = Perimeter(perim2_path)
-    if 'scars_mask_path' in params and not osp.exists(params['scars_mask_path']) and 'past_perims_path' in params:
+    if 'scars_mask_path' in params and 'past_perims_path' in params:
         past_perim = Perimeter(params['past_perims_path'])
         params.update({'past_perims': past_perim}) 
     # if the time is included in the perimeters
