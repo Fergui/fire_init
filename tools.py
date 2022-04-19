@@ -129,12 +129,12 @@ def add_smoke(wrfout_paths, wrfinput_paths):
         logging.warning('missing some wrfout file, so skipping')
         return
     with nc.Dataset(wrfout_paths[-1]) as d:
-        xlon = d.variables['XLONG']
-        xlat = d.variables['XLAT']
+        xlon = d.variables['XLONG'][...]
+        xlat = d.variables['XLAT'][...]
         bbox_out = (xlon.min(), xlon.max(), xlat.min(), xlat.max())
     with nc.Dataset(wrfinput_paths[-1]) as d:
-        xlon = d.variables['XLONG']
-        xlat = d.variables['XLAT']
+        xlon = d.variables['XLONG'][...]
+        xlat = d.variables['XLAT'][...]
         bbox_in = (xlon.min(), xlon.max(), xlat.min(), xlat.max())
     if bbox_out != bbox_in:
         logging.warning('bounding box for wrfout_d03 \n {} \n which is different than wrfinput_d03 \n {} \n add_smoke skipped'.format(bbox_out,bbox_in))
