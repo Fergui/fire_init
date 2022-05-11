@@ -4,6 +4,7 @@ import netCDF4 as nc
 import numpy as np
 from lxml import etree
 import os.path as osp
+from datetime import datetime, timezone
 
 def save_pkl(data, path):
     """
@@ -64,8 +65,9 @@ def read_kml(path):
     :param path: path to KML file with polygon coordinates
     :return: polygons in format list of lists with outer and inner coordinates
     """
-    # parse XLM file
-    tree = etree.parse(path)
+    # parse XML file
+    parser = etree.XMLParser(recover=True, remove_blank_text=True)
+    tree = etree.parse(path, parser)
     # get its root to start finding elements
     root = tree.getroot()
     # get namespace map that each tag is going to contain
@@ -73,22 +75,73 @@ def read_kml(path):
     # create xpath lambda function to generate paths to elements with the namespace map
     xpath = lambda tag: './/{{{}}}{}'.format(nsmap,tag) if nsmap else './/{}'.format(tag)
     polys = []
-    for pm in root.iterfind(xpath('Placemark')): 
+    times = []
+    for pm in root.iterfind(xpath('Placemark')):
+        # look for time in file
+        tspan = pm.find(xpath('TimeSpan')) 
+        tstamp = pm.find(xpath('TimeStamp')) 
+        if tspan is not None:
+            begin = tspan.find(xpath('begin'))
+            end = tspan.find(xpath('end'))
+            if begin is not None:
+                try:
+                    time = datetime.strptime(begin.text,'%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc)
+                except:
+                    time = begin.text
+            elif end is not None:
+                try:
+                    time = datetime.strptime(end.text,'%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc)
+                except:
+                    time = end.text
+            else:
+                time = None
+        elif tstamp is not None:
+            when = tstamp.find(xpath('when'))
+            if when is not None:
+                try:
+                    time = datetime.strptime(when.text,'%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc)
+                except:
+                    time = when.text
+        else:
+            time = None
         for pp in pm.iterfind(xpath('Polygon')):
             # find outerBoundaryIs coordinates element
             out_elem = pp.find(xpath('outerBoundaryIs')).find(xpath('coordinates'))
             # parse outer coordinates from the text of the outer coordinates element
             out_coords = np.array([np.array(coord.split(',')[:2]).astype(float) for coord in out_elem.text.split()])
-            poly = [out_coords]
-            # for each innerBoundaryIs
-            for inn_elems in pp.iterfind(xpath('innerBoundaryIs')):
-                # for each coordinates element
-                for inn_elem in inn_elems.iterfind(xpath('coordinates')):
-                    # parse inner coordinates from the text of the inner coordinates element
-                    inn_coords = np.array([np.array(coord.split(',')[:2]).astype(float) for coord in inn_elem.text.split()])
-                    poly.append(inn_coords)
-            polys.append(poly)
-    return polys
+            if len(out_coords) >= 3:
+                poly = [out_coords]
+                # for each innerBoundaryIs
+                for inn_elems in pp.iterfind(xpath('innerBoundaryIs')):
+                    # for each coordinates element
+                    for inn_elem in inn_elems.iterfind(xpath('coordinates')):
+                        # parse inner coordinates from the text of the inner coordinates element
+                        inn_coords = np.array([np.array(coord.split(',')[:2]).astype(float) for coord in inn_elem.text.split()])
+                        if len(inn_coords) >= 3:
+                            poly.append(inn_coords)
+                polys.append(poly)
+                times.append(time)
+    # clean unique times and re-organize coordinates accordingly
+    times = np.array(times)
+    valid_times = times != None
+    invalid_polys = []
+    for t in np.where(~valid_times)[0]:
+        invalid_polys.append(polys[t])
+    result_times, indxs = np.unique(times[np.where(valid_times)[0]], return_inverse=True)
+    result_times = list(result_times)
+    result_polys = []
+    for t in np.unique(indxs):
+        c = []
+        for i in np.where(indxs == t)[0]:
+            c.append(polys[i])
+        result_polys.append(c)
+    result_ids = [id(p) for p in result_polys]
+    result_polys = sorted(result_polys, key=lambda x: result_times[result_ids.index(id(x))])
+    result_times = sorted(result_times)
+    if len(invalid_polys):
+        result_times.append(None)
+        result_polys.append(invalid_polys)
+    return result_times, result_polys
 
 def integrate_init(wrfinput_path, TIGN_G, FUEL_MASK, outside_time=360000.):
     """
@@ -136,7 +189,7 @@ def add_smoke(wrfout_paths, wrfinput_paths):
         xlon = d.variables['XLONG'][...]
         xlat = d.variables['XLAT'][...]
         bbox_in = (xlon.min(), xlon.max(), xlat.min(), xlat.max())
-    if bbox_out != bbox_in:
+    if any(abs(np.array(bbox_out)-np.array(bbox_in)) > 1e-5):
         logging.warning('bounding box for wrfout_d03 \n {} \n which is different than wrfinput_d03 \n {} \n add_smoke skipped'.format(bbox_out,bbox_in))
         return
     # smoke from previous forecast

@@ -61,7 +61,7 @@ def polys_to_coords(polys):
     elif isinstance(polys, MultiPolygon):
         pass
     else:
-        logging.error(f'polys_to_coords - format of {polys} not recognized')
+        logging.warning(f'polys_to_coords - format of {polys} not recognized')
         return []
     coords = []
     for poly in polys:
