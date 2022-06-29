@@ -18,7 +18,10 @@ def plot_bbox(bbox, show=False):
     ybox = [bbox[2],bbox[3],bbox[3],bbox[2],bbox[2]]
     plt.plot(xbox,ybox,'k-')
     if show:
+        plt.xlabel('Longitude')
+        plt.ylabel('Latitude')
         plt.show()
+        plt.close()
     
 def set_bbox(bbox, show=False):
     """
@@ -29,7 +32,10 @@ def set_bbox(bbox, show=False):
     plt.xlim([bbox[0],bbox[1]])
     plt.ylim([bbox[2],bbox[3]])
     if show:
+        plt.xlabel('Longitude')
+        plt.ylabel('Latitude')
         plt.show()
+        plt.close()
 
 def plot_coords(coords, show=False, **kargs):
     """
@@ -47,7 +53,10 @@ def plot_coords(coords, show=False, **kargs):
                 for ring in p[1:]:
                     plt.plot(np.array(ring)[:,0],np.array(ring)[:,1],**kargs)
     if show:
+        plt.xlabel('Longitude')
+        plt.ylabel('Latitude')
         plt.show()
+        plt.close()
 
 def plot_perim(perim, show=False, **kargs):
     """
@@ -65,7 +74,26 @@ def plot_perim(perim, show=False, **kargs):
                 for ring in p[1:]:
                     plt.plot(np.array(ring)[:,0],np.array(ring)[:,1],**kargs)
     if show:
+        plt.xlabel('Longitude')
+        plt.ylabel('Latitude')
         plt.show()
+        plt.close()
+
+def plot_tmseries(times, areas, show=False, **kargs):
+    """
+    Plot time series of perimeters.
+    :param times: list of datetime format time of perimeter
+    :param areas: list of datetime format time of perimeter
+    :param show: optional, show the plot
+    :param kargs: other paramaters passed to matplotlib.pyplot.plot
+    """
+    areas[areas == 0.]=np.nan
+    plt.plot(times, areas, **kargs)
+    if show:
+        plt.xlabel('Time')
+        plt.ylabel('Area [acres]')
+        plt.show()
+        plt.close()
 
 def plot_detections(path, fmt='r.', show=False, **kargs):
     """
@@ -80,7 +108,10 @@ def plot_detections(path, fmt='r.', show=False, **kargs):
     data = load_pkl(path)
     plt.plot(data['longitude'], data['latitude'], fmt, **kargs)
     if show:
+        plt.xlabel('Longitude')
+        plt.ylabel('Latitude')
         plt.show()
+        plt.close()
 
 def plot_perims(path, show=False):
     """
@@ -95,9 +126,7 @@ def plot_perims(path, show=False):
     perims['perim1'].plot(color='g')
     perims['perim2'].plot(color='k')
     bbox = [fxlon.min(),fxlon.max(),fxlat.min(),fxlat.max()]
-    set_bbox(bbox,show=True)
-    if show:
-        plt.show()
+    set_bbox(bbox,show=show)
     
 def plot_tign(path, show=False):
     """
@@ -114,9 +143,7 @@ def plot_tign(path, show=False):
     TIGN_G[TIGN_G==params['time_step']] = np.nan
     plt.pcolormesh(fxlon,fxlat,TIGN_G)
     bbox = [fxlon.min(),fxlon.max(),fxlat.min(),fxlat.max()]
-    set_bbox(bbox)
-    if show:
-        plt.show()
+    set_bbox(bbox, show=show)
 
 def plot_fmask(path, show=False):
     """
@@ -131,9 +158,7 @@ def plot_fmask(path, show=False):
     FUEL_MASK[FUEL_MASK == 0] = np.nan
     plt.pcolormesh(fxlon,fxlat,FUEL_MASK,cmap='Greys',vmin=0,vmax=2)
     bbox = [fxlon.min(),fxlon.max(),fxlat.min(),fxlat.max()]
-    set_bbox(bbox)
-    if show:
-        plt.show()
+    set_bbox(bbox, show=show)
     
 def plot_pmask(fxlon, fxlat, mask, show=False):
     """
@@ -145,9 +170,7 @@ def plot_pmask(fxlon, fxlat, mask, show=False):
     """
     plt.pcolormesh(fxlon,fxlat,mask,cmap='Greys',vmin=0,vmax=2)
     bbox = [fxlon.min(),fxlon.max(),fxlat.min(),fxlat.max()]
-    set_bbox(bbox)
-    if show:
-        plt.show()
+    set_bbox(bbox, show=show)
 
 if __name__ == '__main__':
     from perimeters import Perimeters

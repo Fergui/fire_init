@@ -2,8 +2,11 @@ import logging
 import pickle
 import netCDF4 as nc
 import numpy as np
+import pandas as pd
 from lxml import etree
+import simplekml
 import os.path as osp
+from collections.abc import Iterable
 from datetime import datetime, timezone
 
 def save_pkl(data, path):
@@ -183,6 +186,50 @@ def read_kml(path):
         result_times.append(None)
         result_polys.append(invalid_polys)
     return result_times, result_polys
+
+def write_kml(perims, path, color=None):
+    if color is None:
+        color = simplekml.Color.red
+    kml = simplekml.Kml()
+    kml.document.name = "Perimeters"
+    for n,perim in enumerate(perims._perims):
+        if perim.time is not None:
+            time = perim.time.strftime('%Y-%m-%dT%H:%M:%SZ')
+            multipoly = kml.newmultigeometry(name='PERIM_'+time)
+        else:
+            multipoly = kml.newmultigeometry(name='PERIM_'+n)
+        if isinstance(perim.poly,Iterable):
+            rings = perim.poly.geoms
+        else:
+            rings = [perim.poly]
+        for p in rings:
+            if p.exterior is None:
+                logging.warning('Perimeters.to_kml - perimeter {} contains a polygon without an outer ring'.format(perim.path))
+                continue
+            try:
+                p = p.simplify(1e-6)
+            except:
+                logging.debug('Perimeters.to_kml - not possible to apply buffer to simplify multi-polygon')
+            outer = np.c_[p.exterior.xy]
+            if len(p.interiors) > 0:
+                inner = [np.c_[i.xy] for i in p.interiors]
+                multipoly.newpolygon(
+                        outerboundaryis=outer, 
+                        innerboundaryis=inner)
+            else:
+                multipoly.newpolygon(
+                        outerboundaryis=outer)             
+        multipoly.timestamp.when = time
+        polycolor = '00'+color[2:]
+        multipoly.style.polystyle.color = polycolor
+        multipoly.style.linestyle.color = color
+    kml.save(path)
+
+def write_csv(perims, path):
+    df = pd.DataFrame({'file': perims.path, 'time': perims.time, 'area': perims.area})
+    if not all([_ == None for _ in perims.time]):
+        df = df.groupby('time').agg({'file': 'first', 'area': 'mean'}).reset_index()
+    df.to_csv(path, index=False)
 
 def integrate_init(wrfinput_path, TIGN_G, FUEL_MASK, outside_time=360000.):
     """

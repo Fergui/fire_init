@@ -2,6 +2,7 @@ import logging
 import numpy as np
 from packaging.version import parse as vparse
 from scipy.spatial import Delaunay
+from scipy.ndimage import gaussian_filter
 from shapely.ops import transform
 from shapely.geometry import Polygon, MultiPolygon
 from matplotlib.path import Path
@@ -231,7 +232,7 @@ def alpha_shape(points, alpha, only_outer=True):
     or also inner edges
     :return: list of lists format with outer and inner coordinates
     """
-    assert points.shape[0] > 3, "Need at least four points"
+    assert points.shape[0] > 3, "geometry.alpha_shape - Need at least four points"
     def add_edge(edges, i, j):
         """
         Add a line between the i-th and j-th points,
@@ -239,7 +240,7 @@ def alpha_shape(points, alpha, only_outer=True):
         """
         if (i, j) in edges or (j, i) in edges:
             # already added
-            assert (j, i) in edges, "Can't go twice over same directed edge right?"
+            assert (j, i) in edges, "geometry.alpha_shape - Can't go twice over same directed edge right?"
             if only_outer:
                 # if both neighboring triangles are in shape, it is not a boundary edge
                 edges.remove((j, i))
@@ -358,4 +359,48 @@ def fire_interp(insideperim1, insideperim2, perim1, perim2, fxlon, fxlat, **para
     TIGN_G_final[TIGN_G_final>outside_time] = outside_time  # if interpolation gave crazy high numbers set them to outside time.
     TIGN_G_final[TIGN_G_final<time_step] = time_step        # if interpolation gave crazy small numbers set them to time step.
     return TIGN_G_final
-    
+
+def array_to_contours(array, levels=[.5]):
+    """
+    Create contour coordinates from array.
+    :param array: array with values to generate the contours at certain levels.
+    :param levels: levels to generate the contours.
+    :return: coordinates with countours.
+    """
+    import matplotlib
+    array = np.array(array)
+    levels = np.array(levels)
+    assert len(array.shape) == 3, "geometry.array_to_contours - array format not correctly specified"
+    x,y,z = array
+    # smooth the perimeters using a gaussian filter
+    sigma = 2.
+    z = gaussian_filter(z,sigma)
+    backend = matplotlib.get_backend()
+    matplotlib.pyplot.switch_backend('agg')
+    cn = matplotlib.pyplot.contour(x,y,z,levels=levels)
+    contours = []
+    for i,level in enumerate(levels):
+        logging.debug('array_to_contours - processing level {} ({}/{})'.format(level,i+1,len(levels)))
+        # get collection for the level
+        col = cn.collections[np.min(np.nonzero(levels == level)[0])]
+        # get all path coordinates
+        coords = np.array([np.array(cp.to_polygons()[0]) for cp in col.get_paths()],dtype=object)
+        # look if clock-wise (which defines outer vs inner coordinates)
+        clock = np.array([is_clockwise(p) for p in coords],dtype=bool)
+        # define outer and inner coordinates
+        outers = coords[clock]
+        inners = coords[~clock]
+        # create every outer as an independent list
+        clean_coords = [[outer] for outer in outers]
+        # add inner coordinates when inside an outer coordinates
+        for inner in inners:
+            p = Polygon(inner)
+            for k,outer in enumerate(outers):
+                if p.within(Polygon(outer)):
+                    clean_coords[k].append(inner)
+                    break
+        # append coordinates to contours list
+        contours.append(clean_coords)
+    matplotlib.pyplot.close()
+    matplotlib.pyplot.switch_backend(backend)
+    return contours

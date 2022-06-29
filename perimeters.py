@@ -1,15 +1,12 @@
 try:
-    from .geometry import coords_to_polys, polys_to_coords, poly_area
-    from .plot_tools import plot_perim,_colors
-    from .tools import load_pkl,read_kml
+    from .geometry import coords_to_polys, polys_to_coords, poly_area, array_to_contours
+    from .plot_tools import plot_perim,plot_tmseries,_colors
+    from .tools import load_pkl,save_pkl,read_kml,write_kml,write_csv
 except:
-    from geometry import coords_to_polys, polys_to_coords, poly_area
-    from plot_tools import plot_perim,_colors
-    from tools import load_pkl,read_kml 
+    from geometry import coords_to_polys, polys_to_coords, poly_area, array_to_contours
+    from plot_tools import plot_perim,plot_tmseries,_colors
+    from tools import load_pkl,save_pkl,read_kml,write_kml,write_csv
 from collections.abc import Iterable
-import pandas as pd
-import numpy as np
-import simplekml
 import logging
 
 class PerimeterError(Exception):
@@ -104,7 +101,11 @@ class Perimeter(object):
         self.poly = self._polygonize()
     
     def _from_array(self, array):
-        raise NotImplementedError('Perimeter._from_array not implemented')
+        coords = array_to_contours(array)
+        return coords[0]
+    
+    def to_pickle(self, path):
+        save_pkl((self.time, self.coords), path)
 
 class Perimeters(object):
     """
@@ -152,15 +153,22 @@ class Perimeters(object):
     
     def plot(self, show=False, **args):
         i = -1
+        change_color = False
         for i,p in enumerate(self._perims[:-1]):
             if 'color' not in args:
                 color = _colors(i % 10) 
                 args['color'] = color
+                change_color = True
             plot_perim(p, show=False, **args)
+            if change_color:
+                args.pop('color')
         if 'color' not in args:
             color = _colors((i+1) % 10)
             args['color'] = color
         plot_perim(self._perims[-1], show=show, **args)
+    
+    def tmseries(self, show=False, **args):
+        plot_tmseries(self.time, self.area, show=show, **args)
     
     def sort(self):
         valid_perims = [p for p in self._perims if p.time is not None]
@@ -169,6 +177,7 @@ class Perimeters(object):
         self._update_params()
     
     def _update_params(self):
+        self.num_perims = len(self._perims)
         self.path = [p.path for p in self._perims]
         self.time = [p.time for p in self._perims]
         self.area = [p.area for p in self._perims]
@@ -211,55 +220,19 @@ class Perimeters(object):
             self._perims.append(Perimeter({'time': t, 'poly': c}))  
 
     def _from_pkl(self, path):
-        logging.error('Not implemented.')
-        pass
-    
-    def _from_array(self, array):
-        logging.error('Not implemented.')
-        pass
+        self._perims = load_pkl(path)
     
     def to_csv(self, path):
         logging.info('Perimeters.to_csv - creating CSV file {}'.format(path))
-        df = pd.DataFrame({'file': self.path, 'time': self.time, 'area': self.area})
-        if not all([_ == None for _ in self.time]):
-            df = df.groupby('time').agg({'file': 'first', 'area': 'mean'}).reset_index()
-        df.to_csv(path, index=False)
+        write_csv(self, path)
 
-    def to_kml(self, path):
+    def to_pickle(self, path):
+        logging.info('Perimeters.to_pickle - creating pickle file {}'.format(path))
+        save_pkl(self._perims, path)
+
+    def to_kml(self, path, color=None):
         logging.info('Perimeters.to_kml - creating KML file {}'.format(path))
-        kml = simplekml.Kml()
-        kml.document.name = "Perimeters"
-        for n,perim in enumerate(self._perims):
-            if perim.time is not None:
-                time = perim.time.strftime('%Y-%m-%dT%H:%M:%SZ')
-                multipoly = kml.newmultigeometry(name='PERIM_'+time)
-            else:
-                multipoly = kml.newmultigeometry(name='PERIM_'+n)
-            if isinstance(perim.poly,Iterable):
-                rings = perim.poly.geoms
-            else:
-                rings = [perim.poly]
-            for p in rings:
-                if p.exterior is None:
-                    logging.warning('Perimeters.to_kml - perimeter {} contains a polygon without an outer ring'.format(perim.path))
-                    continue
-                try:
-                    p = p.simplify(1e-6)
-                except:
-                    logging.debug('Perimeters.to_kml - not possible to apply buffer to simplify multi-polygon')
-                outer = np.c_[p.exterior.xy]
-                if len(p.interiors) > 0:
-                    inner = [np.c_[i.xy] for i in p.interiors]
-                    multipoly.newpolygon(
-                          outerboundaryis=outer, 
-                          innerboundaryis=inner)
-                else:
-                    multipoly.newpolygon(
-                          outerboundaryis=outer)             
-            multipoly.timestamp.when = time
-            multipoly.style.polystyle.color = '990000ff'
-            multipoly.style.linestyle.color = simplekml.Color.red
-        kml.save(path)
+        write_kml(self, path, color=color)
             
  
 if __name__ == '__main__':
