@@ -87,8 +87,14 @@ def plot_tmseries(times, areas, show=False, **kargs):
     :param show: optional, show the plot
     :param kargs: other paramaters passed to matplotlib.pyplot.plot
     """
-    areas[areas == 0.]=np.nan
-    plt.plot(times, areas, **kargs)
+    times = np.array(times)
+    areas = np.array(areas)
+    times = times[areas != 0.]
+    areas = areas[areas != 0.]
+    if any([t is None for t in times]):
+        plt.plot(areas, **kargs)
+    else:
+        plt.plot(times, areas, **kargs)
     if show:
         plt.xlabel('Time')
         plt.ylabel('Area [acres]')
