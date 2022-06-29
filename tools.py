@@ -59,6 +59,61 @@ def read_bbox(path):
     bbox = (fxlon.min(),fxlon.max(),fxlat.min(),fxlat.max())
     return bbox
 
+def parse_placemark(root, xpath):
+    """
+    Parse polygon coordinates from a Placemark KML object.
+    :param root: Placemark KML object parsed with lxml
+    :param xpath: Lambda with namespace to add to object name
+    :return: list of times and polys to concatenate
+    """
+    times = []
+    polys = []
+    # look for time in file
+    tspan = root.find(xpath('TimeSpan')) 
+    tstamp = root.find(xpath('TimeStamp')) 
+    if tspan is not None:
+        begin = tspan.find(xpath('begin'))
+        end = tspan.find(xpath('end'))
+        if begin is not None:
+            try:
+                time = datetime.strptime(begin.text,'%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc)
+            except:
+                time = begin.text
+        elif end is not None:
+            try:
+                time = datetime.strptime(end.text,'%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc)
+            except:
+                time = end.text
+        else:
+            time = None
+    elif tstamp is not None:
+        when = tstamp.find(xpath('when'))
+        if when is not None:
+            try:
+                time = datetime.strptime(when.text,'%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc)
+            except:
+                time = when.text
+    else:
+        time = None
+    for pp in root.iterfind(xpath('Polygon')):
+        # find outerBoundaryIs coordinates element
+        out_elem = pp.find(xpath('outerBoundaryIs')).find(xpath('coordinates'))
+        # parse outer coordinates from the text of the outer coordinates element
+        out_coords = np.array([np.char.strip(coord.split(',')[:2]).astype(float) for coord in out_elem.text.strip().replace(' ',',').split('0,') if coord.strip() != ''])
+        if len(out_coords) >= 50:
+            poly = [out_coords]
+            # for each innerBoundaryIs
+            for inn_elems in pp.iterfind(xpath('innerBoundaryIs')):
+                # for each coordinates element
+                for inn_elem in inn_elems.iterfind(xpath('coordinates')):
+                    # parse inner coordinates from the text of the inner coordinates element
+                    inn_coords = np.array([np.array(coord.split(',')[:2]).astype(float) for coord in inn_elem.text.split()])
+                    if len(inn_coords) >= 10:
+                        poly.append(inn_coords)
+            times.append(time)
+            polys.append(poly)
+    return times,polys
+
 def read_kml(path):
     """
     Read KML file with polygon coordinates.
@@ -76,51 +131,37 @@ def read_kml(path):
     xpath = lambda tag: './/{{{}}}{}'.format(nsmap,tag) if nsmap else './/{}'.format(tag)
     polys = []
     times = []
+    proc_perims = False
+    # start by trying to process placemarks that has some key decription parameters
     for pm in root.iterfind(xpath('Placemark')):
-        # look for time in file
-        tspan = pm.find(xpath('TimeSpan')) 
-        tstamp = pm.find(xpath('TimeStamp')) 
-        if tspan is not None:
-            begin = tspan.find(xpath('begin'))
-            end = tspan.find(xpath('end'))
-            if begin is not None:
-                try:
-                    time = datetime.strptime(begin.text,'%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc)
-                except:
-                    time = begin.text
-            elif end is not None:
-                try:
-                    time = datetime.strptime(end.text,'%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc)
-                except:
-                    time = end.text
-            else:
-                time = None
-        elif tstamp is not None:
-            when = tstamp.find(xpath('when'))
-            if when is not None:
-                try:
-                    time = datetime.strptime(when.text,'%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc)
-                except:
-                    time = when.text
-        else:
-            time = None
-        for pp in pm.iterfind(xpath('Polygon')):
-            # find outerBoundaryIs coordinates element
-            out_elem = pp.find(xpath('outerBoundaryIs')).find(xpath('coordinates'))
-            # parse outer coordinates from the text of the outer coordinates element
-            out_coords = np.array([np.array(coord.split(',')[:2]).astype(float) for coord in out_elem.text.split()])
-            if len(out_coords) >= 3:
-                poly = [out_coords]
-                # for each innerBoundaryIs
-                for inn_elems in pp.iterfind(xpath('innerBoundaryIs')):
-                    # for each coordinates element
-                    for inn_elem in inn_elems.iterfind(xpath('coordinates')):
-                        # parse inner coordinates from the text of the inner coordinates element
-                        inn_coords = np.array([np.array(coord.split(',')[:2]).astype(float) for coord in inn_elem.text.split()])
-                        if len(inn_coords) >= 3:
-                            poly.append(inn_coords)
-                polys.append(poly)
-                times.append(time)
+        desc = pm.find(xpath('description'))
+        desc = '' if desc is None else desc.text.lower()
+        if 'gis_acres' in desc or 'polygon' in desc and 'fc ir polygon type' not in desc or 'ir heat perimeter' in desc and 'area covered' not in desc:
+            proc_perims = True
+            ptimes,ppolys = parse_placemark(pm, xpath)
+            times += ptimes
+            polys += ppolys
+    # if any perimeter was processed in the previous stage, try to get all placemarks with document name having the word "perimeter"
+    if not proc_perims:
+        for doc in root.iterfind(xpath('Document')):
+            name = doc.find(xpath('name'))
+            name = '' if name is None else name.text.lower()
+            if 'perimeter' in name:
+                proc_perim = True
+                for pm in doc.iterfind(xpath('Placemark')):
+                    ptimes,ppolys = parse_placemark(pm, xpath)
+                    times += ptimes
+                    polys += ppolys
+    # if any perimeter was processed in the previous two stages, try to get all placemarks having name the word "perimeter"
+    if not proc_perims:
+        for pm in root.iterfind(xpath('Placemark')):
+            name = pm.find(xpath('name'))
+            name = '' if name is None else name.text.lower()
+            if 'perimeter' in name:
+                proc_perim = True
+                ptimes,ppolys = parse_placemark(pm, xpath)
+                times += ptimes
+                polys += ppolys
     # clean unique times and re-organize coordinates accordingly
     times = np.array(times)
     valid_times = times != None
