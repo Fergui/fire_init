@@ -150,7 +150,17 @@ def read_kml(path):
             name = doc.find(xpath('name'))
             name = '' if name is None else name.text.lower()
             if 'perimeter' in name:
-                proc_perim = True
+                proc_perims = True
+                for pm in doc.iterfind(xpath('Placemark')):
+                    ptimes,ppolys = parse_placemark(pm, xpath)
+                    times += ptimes
+                    polys += ppolys
+    if not proc_perims:
+        for folder in root.iterfind(xpath('Folder')):
+            name = doc.find(xpath('name'))
+            name = '' if name is None else name.text.lower()
+            if 'perimeter' in name:
+                proc_perims = True
                 for pm in doc.iterfind(xpath('Placemark')):
                     ptimes,ppolys = parse_placemark(pm, xpath)
                     times += ptimes
@@ -161,7 +171,7 @@ def read_kml(path):
             name = pm.find(xpath('name'))
             name = '' if name is None else name.text.lower()
             if 'perimeter' in name:
-                proc_perim = True
+                proc_perims = True
                 ptimes,ppolys = parse_placemark(pm, xpath)
                 times += ptimes
                 polys += ppolys
