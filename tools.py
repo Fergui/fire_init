@@ -157,11 +157,11 @@ def read_kml(path):
                     polys += ppolys
     if not proc_perims:
         for folder in root.iterfind(xpath('Folder')):
-            name = doc.find(xpath('name'))
+            name = folder.find(xpath('name'))
             name = '' if name is None else name.text.lower()
             if 'perimeter' in name:
                 proc_perims = True
-                for pm in doc.iterfind(xpath('Placemark')):
+                for pm in folder.iterfind(xpath('Placemark')):
                     ptimes,ppolys = parse_placemark(pm, xpath)
                     times += ptimes
                     polys += ppolys
