@@ -180,12 +180,22 @@ def plot_pmask(fxlon, fxlat, mask, show=False):
 
 if __name__ == '__main__':
     from perimeters import Perimeters
+    import os.path as osp
     import sys
-    if len(sys.argv) < 2:
-        print('ERROR: {} perim_path [perim_path ...]'.format(sys.argv[0]))
-    perims_path = sys.argv[1:]
-    plot_detections('arcgis_hotspots.pkl')
+    if len(sys.argv) > 1:
+        perims_path = sys.argv[1:]
+    else:
+        perims_path = []
+    if osp.exists('perim1.pkl'):
+        perims_path.append('perim1.pkl')
+    if osp.exists('perim2.pkl'):
+        perims_path.append('perim2.pkl')
     perims = Perimeters(perims_path)
-    perims.plot()
-    bbox = read_bbox('wrf_init')
-    set_bbox(bbox,show=True)
+    if osp.exists('arcgis_hotspots.pkl'):
+        plot_detections('arcgis_hotspots.pkl')
+    if osp.exists('wrf_init'):
+        perims.plot()
+        bbox = read_bbox('wrf_init')
+        set_bbox(bbox,show=True)
+    else:
+        perims.plot(show=True)

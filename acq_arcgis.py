@@ -1,10 +1,11 @@
 try:
-    from .tools import read_wrfinfo
-    from .geometry import featureset_to_coords, simplify_coords, lonlat_to_merc
+    from .tools import read_wrfinfo, save_pkl
+    from .geometry import alpha_shape, coords_to_polys, polys_to_coords, featureset_to_coords, simplify_coords, merc_to_lonlat, lonlat_to_merc
 except:
-    from tools import read_wrfinfo
-    from geometry import featureset_to_coords, simplify_coords, lonlat_to_merc  
-from datetime import datetime,timedelta,timezone
+    from tools import read_wrfinfo, save_pkl
+    from geometry import alpha_shape, coords_to_polys, polys_to_coords, featureset_to_coords, simplify_coords, merc_to_lonlat, lonlat_to_merc
+from datetime import datetime, timedelta, timezone
+import numpy as np
 import arcgis
 import pickle
 import logging
@@ -135,6 +136,36 @@ def acq_arcgis_viirs(bbox, now=datetime.utcnow().replace(tzinfo=timezone.utc), m
     out_file = 'arcgis_hotspots_{:02d}{:02d}_{:02d}z.pkl'.format(now.month,now.day,now.hour)
     feature_set.to_pickle(out_file, protocol=4)
     feature_set.to_pickle('arcgis_hotspots.pkl', protocol=4)
+    alpha = 375
+    x = feature_set['SHAPE'].map(lambda row: row['x'])
+    y = feature_set['SHAPE'].map(lambda row: row['y'])
+    points = np.vstack([x,y]).T
+    if len(points) < 4:
+        logging.warning('{} hotspots found, less than 4 so skipping alphashape'.format(len(points)))
+        return out_file
+    # last detection time
+    t = feature_set['esritimeutc'].sort_values(ascending=False).iloc[0].to_pydatetime(warn=False).replace(tzinfo=timezone.utc)
+    # alpha shape
+    perims = alpha_shape(points, alpha=alpha, only_outer=True)
+    # clean the perimeters
+    if len(perims):
+        # set parameters to reduce complexity of multipolygons
+        params = {
+            'min_inner_coords': 20,     # minimum number of coordinates for an inner polygon
+            'max_inner_coords': 1000,   # maximum number of coordinates for an inner polygon
+            'min_outer_coords': 4,      # minimum number of coordinates for an outer polygon
+            'max_outer_coords': 10000   # maximum number of coordinates for an outer polygon
+        }
+        perims = simplify_coords(perims,**params)
+        polys = coords_to_polys(perims)
+        transf_polys = merc_to_lonlat(polys)
+        transf_perims = polys_to_coords(transf_polys)
+        # save perimeters
+        if len(transf_perims):
+            save_pkl((t,transf_perims),'perim2.pkl')
+    else:
+        transf_perims = perims
+    save_pkl((t,transf_perims),'hotspots_perims_{:02d}{:02d}_{:02d}z.pkl'.format(t.month,t.day,t.hour))
     return out_file
  
 if __name__ == '__main__':

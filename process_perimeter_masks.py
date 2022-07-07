@@ -150,7 +150,7 @@ if __name__ == '__main__':
     import sys
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
     if len(sys.argv) < 4:
-        logging.error('{} perim1_path perim2_path YYYYMMDDHH [prev_results_path]'.format(sys.argv[0]))
+        logging.error('python {} perim1_path perim2_path YYYYMMDDHH [prev_results_path]'.format(sys.argv[0]))
         sys.exit()
     perim1_path = sys.argv[1]
     perim2_path = sys.argv[2]
@@ -191,7 +191,7 @@ if __name__ == '__main__':
     logging.info('getting IR fire perimeters')
     perim1 = Perimeter(perim1_path)
     perim2 = Perimeter(perim2_path)
-    if 'scars_mask_path' in params and 'past_perims_path' in params:
+    if 'scars_mask_path' in params and 'past_perims_path' in params and osp.exists(params['past_perims_path']):
         past_perim = Perimeter(params['past_perims_path'])
         params.update({'past_perims': past_perim}) 
     # if the time is included in the perimeters
