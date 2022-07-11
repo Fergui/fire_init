@@ -60,7 +60,7 @@ def perims_interp(perim1, perim2, fxlon, fxlat, **params):
     processed_prev_perims = False
     reprocess_prev = True
     same_bbox = False
-    if prev_perims is not None:
+    if prev_perims is not None and osp.exists(prev_perims):
         prev_PERIMS = {}
         prev_MASKS = {}
         prev_BUFF_MASKS = {}
