@@ -9,8 +9,6 @@ import os.path as osp
 import numpy as np
 import logging
 
-from pyparsing import And
-
 def perims_interp(perim1, perim2, fxlon, fxlat, **params):
     """
     Perimeter interpolation and fuel masking.
@@ -187,10 +185,13 @@ if __name__ == '__main__':
     ifm,ifn,ffm,ffn,fxlon,fxlat = read_wrfinfo(wrf_path)
     bbox = [fxlon.min(),fxlon.max(),fxlat.min(),fxlat.max()]
     params.update({'ifm': ifm, 'ifn': ifn, 'ffm': ffm, 'ffn': ffn, 'bbox': bbox})
-    # getting IR perimeters
-    logging.info('getting IR fire perimeters')
-    perim1 = Perimeter(perim1_path)
-    perim2 = Perimeter(perim2_path)
+    # getting perimeters
+    logging.info('getting fire perimeters')
+    if osp.exists(perim1_path):
+        perim1 = Perimeter(perim1_path)
+        if osp.exists(perim2_path):
+            perim2 = Perimeter(perim2_path)
+        
     if 'scars_mask_path' in params and 'past_perims_path' in params and osp.exists(params['past_perims_path']):
         past_perim = Perimeter(params['past_perims_path'])
         params.update({'past_perims': past_perim}) 
