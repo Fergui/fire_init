@@ -86,13 +86,13 @@ def lonlat_to_merc(*args):
         if len(args) != 2:
             return transform(transformer, *args)  
         else:
-            return transformer(args[0], args[1])
+            return transformer(*args)
     else:
-        transformer = pyproj.Transformer.from_crs(proj_latlon, proj_merc).transform
+        transformer = pyproj.Transformer.from_crs(proj_latlon, proj_merc, always_xy=True).transform
         if len(args) != 2:
             return transform(transformer, *args)
         else:
-            return transformer(args[1], args[0])
+            return transformer(*args)
 
 def merc_to_lonlat(*args):
     """
@@ -105,13 +105,13 @@ def merc_to_lonlat(*args):
         if len(args) != 2:
             return transform(transformer, *args)  
         else:
-            return transformer(args[0], args[1])
+            return transformer(*args)
     else:
-        transformer = pyproj.Transformer.from_crs(proj_merc, proj_latlon).transform
+        transformer = pyproj.Transformer.from_crs(proj_merc, proj_latlon, always_xy=True).transform
         if len(args) != 2:
             return transform(transformer, *args)
         else:
-            return transformer(*args)[::-1]
+            return transformer(*args)
 
 def featureset_to_coords(feature_set):
     """

@@ -27,7 +27,20 @@ def retry_query(layer, where=None, geometry_filter=None, max_retries=5):
     return feature_set
 
 def acq_arcgis_past_perims(bbox, now=datetime.utcnow().replace(tzinfo=timezone.utc), max_retries=5):
-    nyears = 1
+    # number of years
+    nyears = 3
+    # transform bbox to mercator
+    xmin,ymin = lonlat_to_merc(bbox[0],bbox[2])
+    xmax,ymax = lonlat_to_merc(bbox[1],bbox[3])
+    # define AOI
+    aoi_latlon = {
+            'xmax': float(bbox[1]), 'xmin': float(bbox[0]), 
+            'ymax': float(bbox[3]), 'ymin': float(bbox[2])
+    }
+    aoi_merc = {
+            'xmax': xmax, 'xmin': xmin, 
+            'ymax': ymax, 'ymin': ymin
+    }
     # set parameters to reduce complexity of multipolygons
     params = {
         'min_inner_coords': 50,     # minimum number of coordinates for an inner polygon
@@ -35,23 +48,30 @@ def acq_arcgis_past_perims(bbox, now=datetime.utcnow().replace(tzinfo=timezone.u
         'min_outer_coords': 500,    # minimum number of coordinates for an outer polygon
         'max_outer_coords': 10000   # maximum number of coordinates for an outer polygon 
     }
+    # define temporal interval
     time_from = now-timedelta(days=nyears*365+90)
     time_to = now-timedelta(days=90)
-    # GIS object
-    gis = arcgis.gis.GIS()
-    # define AOI
-    aoi = {'xmax': float(bbox[1]), 'xmin': float(bbox[0]), 'ymax': float(bbox[3]), 'ymin': float(bbox[2])}
-    # get dataset
-    dataset = gis.content.get('585b8ff97f5c45fe924d3a1221b446c6')
-    # get layer
-    layer = dataset.layers[0]
     # create temporal filter
     time_fil = '(poly_DateCurrent > DATE \'{:04d}-{:02d}-{:02d}\') AND (poly_DateCurrent < DATE \'{:04d}-{:02d}-{:02d}\')'.format(time_from.year,time_from.month,time_from.day,time_to.year,time_to.month,time_to.day)
     # query IR fire perimeters in bounding box
-    feature_set = retry_query(layer, where=time_fil, geometry_filter=arcgis.geometry.filters.intersects(aoi), max_retries=max_retries)
-    # reset index
+    # GIS object
+    gis = arcgis.gis.GIS()
+    # get Historic Geomac Perimeters Combined 2000-2018 dataset
+    #dataset = gis.content.get('72a928a667634be1b795aa76a61e95f8')
+    #layer = dataset.layers[19]
+    #feature_set = retry_query(layer, geometry_filter=arcgis.geometry.filters.intersects(aoi_merc), max_retries=max_retries)
+    #feature_set = feature_set.sdf.reset_index(drop=True)
+    # get Historic Geomac Perimeters 2019 dataset
+    #dataset = gis.content.get('a829aefbe4e5471490d8f3d47ca5410d')
+    #layer = dataset.layers[0]
+    #feature_set = retry_query(layer, geometry_filter=arcgis.geometry.filters.intersects(aoi_merc), max_retries=max_retries)
+    #feature_set = feature_set.sdf.reset_index(drop=True)
+    # get Fire History Perimeters dataset
+    dataset = gis.content.get('585b8ff97f5c45fe924d3a1221b446c6')
+    layer = dataset.layers[0]
+    #feature_set = retry_query(layer, geometry_filter=arcgis.geometry.filters.intersects(aoi_latlon), max_retries=max_retries)
+    feature_set = retry_query(layer, where=time_fil, geometry_filter=arcgis.geometry.filters.intersects(aoi_latlon), max_retries=max_retries)
     feature_set = feature_set.sdf.reset_index(drop=True)
-    # create SHAPE without geometry
     coords = featureset_to_coords(feature_set)
     coords = simplify_coords(coords, **params)
     if len(coords):
@@ -65,6 +85,7 @@ def acq_arcgis_past_perims(bbox, now=datetime.utcnow().replace(tzinfo=timezone.u
     return now, coords
 
 def acq_arcgis_perims(bbox, now=datetime.utcnow().replace(tzinfo=timezone.utc), max_retries=5):
+    time = now-timedelta(days=2)
     # set parameters to reduce complexity of multipolygons
     params = {
         'min_inner_coords': 20,     # minimum number of coordinates for an inner polygon
@@ -72,7 +93,6 @@ def acq_arcgis_perims(bbox, now=datetime.utcnow().replace(tzinfo=timezone.utc), 
         'min_outer_coords': 100,    # minimum number of coordinates for an outer polygon
         'max_outer_coords': 10000   # maximum number of coordinates for an outer polygon 
     }
-    time = now-timedelta(days=2)
     # GIS object
     gis = arcgis.gis.GIS()
     # define AOI
@@ -107,6 +127,13 @@ def acq_arcgis_perims(bbox, now=datetime.utcnow().replace(tzinfo=timezone.utc), 
 
 def acq_arcgis_viirs(bbox, now=datetime.utcnow().replace(tzinfo=timezone.utc), max_retries=5):
     time = now-timedelta(days=2)
+    # set parameters to reduce complexity of multipolygons
+    params = {
+        'min_inner_coords': 20,     # minimum number of coordinates for an inner polygon
+        'max_inner_coords': 1000,   # maximum number of coordinates for an inner polygon
+        'min_outer_coords': 4,      # minimum number of coordinates for an outer polygon
+        'max_outer_coords': 10000   # maximum number of coordinates for an outer polygon
+    }
     # GIS object
     gis = arcgis.gis.GIS()
     # transform bbox to mercator
@@ -149,13 +176,6 @@ def acq_arcgis_viirs(bbox, now=datetime.utcnow().replace(tzinfo=timezone.utc), m
     perims = alpha_shape(points, alpha=alpha, only_outer=True)
     # clean the perimeters
     if len(perims):
-        # set parameters to reduce complexity of multipolygons
-        params = {
-            'min_inner_coords': 20,     # minimum number of coordinates for an inner polygon
-            'max_inner_coords': 1000,   # maximum number of coordinates for an inner polygon
-            'min_outer_coords': 4,      # minimum number of coordinates for an outer polygon
-            'max_outer_coords': 10000   # maximum number of coordinates for an outer polygon
-        }
         perims = simplify_coords(perims,**params)
         polys = coords_to_polys(perims)
         transf_polys = merc_to_lonlat(polys)
@@ -164,7 +184,7 @@ def acq_arcgis_viirs(bbox, now=datetime.utcnow().replace(tzinfo=timezone.utc), m
         if len(transf_perims):
             save_pkl((t,transf_perims),'perim2.pkl')
     else:
-        transf_perims = perims
+        transf_perims = []
     save_pkl((t,transf_perims),'hotspots_perims_{:02d}{:02d}_{:02d}z.pkl'.format(t.month,t.day,t.hour))
     return out_file
  
