@@ -191,6 +191,9 @@ if __name__ == '__main__':
     if osp.exists('perim2.pkl'):
         perims_path.append('perim2.pkl')
     perims = Perimeters(perims_path)
+    if osp.exists('arcgis_past_perims.pkl'):
+        past_perim = Perimeters(['arcgis_past_perims.pkl'])
+        past_perim.plot(color='gray')
     if osp.exists('arcgis_hotspots.pkl'):
         plot_detections('arcgis_hotspots.pkl')
     if osp.exists('wrf_init'):

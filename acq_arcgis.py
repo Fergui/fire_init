@@ -5,6 +5,7 @@ except:
     from tools import read_wrfinfo, save_pkl
     from geometry import alpha_shape, coords_to_polys, polys_to_coords, featureset_to_coords, simplify_coords, merc_to_lonlat, lonlat_to_merc
 from datetime import datetime, timedelta, timezone
+import pandas as pd
 import numpy as np
 import arcgis
 import pickle
@@ -28,7 +29,7 @@ def retry_query(layer, where=None, geometry_filter=None, max_retries=5):
 
 def acq_arcgis_past_perims(bbox, now=datetime.utcnow().replace(tzinfo=timezone.utc), max_retries=5):
     # number of years
-    nyears = 3
+    #nyears = 3
     # transform bbox to mercator
     xmin,ymin = lonlat_to_merc(bbox[0],bbox[2])
     xmax,ymax = lonlat_to_merc(bbox[1],bbox[3])
@@ -49,31 +50,38 @@ def acq_arcgis_past_perims(bbox, now=datetime.utcnow().replace(tzinfo=timezone.u
         'max_outer_coords': 10000   # maximum number of coordinates for an outer polygon 
     }
     # define temporal interval
-    time_from = now-timedelta(days=nyears*365+90)
-    time_to = now-timedelta(days=90)
+    #time_from = now-timedelta(days=nyears*365+90)
+    #time_to = now-timedelta(days=90)
     # create temporal filter
-    time_fil = '(poly_DateCurrent > DATE \'{:04d}-{:02d}-{:02d}\') AND (poly_DateCurrent < DATE \'{:04d}-{:02d}-{:02d}\')'.format(time_from.year,time_from.month,time_from.day,time_to.year,time_to.month,time_to.day)
+    #time_fil = '(poly_DateCurrent > DATE \'{:04d}-{:02d}-{:02d}\') AND (poly_DateCurrent < DATE \'{:04d}-{:02d}-{:02d}\')'.format(time_from.year,time_from.month,time_from.day,time_to.year,time_to.month,time_to.day)
     # query IR fire perimeters in bounding box
     # GIS object
     gis = arcgis.gis.GIS()
     # get Historic Geomac Perimeters Combined 2000-2018 dataset
-    #dataset = gis.content.get('72a928a667634be1b795aa76a61e95f8')
-    #layer = dataset.layers[19]
-    #feature_set = retry_query(layer, geometry_filter=arcgis.geometry.filters.intersects(aoi_merc), max_retries=max_retries)
-    #feature_set = feature_set.sdf.reset_index(drop=True)
+    dataset = gis.content.get('72a928a667634be1b795aa76a61e95f8')
+    layer = dataset.layers[19]
+    feature_set = retry_query(layer, geometry_filter=arcgis.geometry.filters.intersects(aoi_merc), max_retries=max_retries)
+    feature_set_1 = feature_set.sdf.reset_index(drop=True)
     # get Historic Geomac Perimeters 2019 dataset
-    #dataset = gis.content.get('a829aefbe4e5471490d8f3d47ca5410d')
-    #layer = dataset.layers[0]
-    #feature_set = retry_query(layer, geometry_filter=arcgis.geometry.filters.intersects(aoi_merc), max_retries=max_retries)
-    #feature_set = feature_set.sdf.reset_index(drop=True)
+    dataset = gis.content.get('a829aefbe4e5471490d8f3d47ca5410d')
+    layer = dataset.layers[0]
+    feature_set = retry_query(layer, geometry_filter=arcgis.geometry.filters.intersects(aoi_merc), max_retries=max_retries)
+    feature_set_2 = feature_set.sdf.reset_index(drop=True)
+    feature_set = pd.concat((feature_set_1, feature_set_2))
+    coords = featureset_to_coords(feature_set)
+    coords = simplify_coords(coords, **params)
+    polys = coords_to_polys(coords)
+    transf_polys = merc_to_lonlat(polys)
+    transf_coords = polys_to_coords(transf_polys)
     # get Fire History Perimeters dataset
     dataset = gis.content.get('585b8ff97f5c45fe924d3a1221b446c6')
     layer = dataset.layers[0]
-    #feature_set = retry_query(layer, geometry_filter=arcgis.geometry.filters.intersects(aoi_latlon), max_retries=max_retries)
-    feature_set = retry_query(layer, where=time_fil, geometry_filter=arcgis.geometry.filters.intersects(aoi_latlon), max_retries=max_retries)
+    feature_set = retry_query(layer, geometry_filter=arcgis.geometry.filters.intersects(aoi_latlon), max_retries=max_retries)
+    #feature_set = retry_query(layer, where=time_fil, geometry_filter=arcgis.geometry.filters.intersects(aoi_latlon), max_retries=max_retries)
     feature_set = feature_set.sdf.reset_index(drop=True)
     coords = featureset_to_coords(feature_set)
     coords = simplify_coords(coords, **params)
+    coords += transf_coords
     if len(coords):
         # save pickle file 
         with open('arcgis_past_perims.pkl','wb') as f:
